@@ -10,6 +10,7 @@ Extends User Defined Forms so that CMS users can create customized listings base
 
 ## Requirements
 SilverStripe 3.1 or higher
+BetterButtons 1.2 or higher (lower versions might work fine but are untested)
 
 ## Installation
 ```composer require silbinarywolf/usersubmissionpages:1.0.*```

@@ -1,0 +1,19 @@
+.usersubmissionholder-add-missing-fields {
+	margin-top: 10px !important;
+}
+
+.fieldgroup.usersubmissionholder-add-field-buttons {
+    padding-left: 185px;
+    margin: 0;
+    margin-top: -10px;
+    border: 0;
+}
+
+.fieldgroup.usersubmissionholder-add-field-buttons label {
+    display: none !important;
+}
+
+.usersubmissionholder-add-field-hint {
+	height: 22px;
+	padding-top: 6px;
+}

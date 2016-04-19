@@ -1,0 +1,8 @@
+name: userformpages
+---
+SubmittedForm:
+  extensions:
+    - SubmittedFormListingExtension
+SubmittedFormField:
+  extensions:
+    - SubmittedFormFieldListingExtension

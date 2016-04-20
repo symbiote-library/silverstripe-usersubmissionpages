@@ -2,6 +2,7 @@
 
 class UserSubmissionHolder extends UserDefinedForm {
 	private static $db = array(
+		'ItemsPerPage' => 'Int',
 		'ContentAdd' => 'HTMLText',
 		'TemplateHolderMarkup' => 'Text',
 		'TemplatePageMarkup' => 'Text',
@@ -12,6 +13,7 @@ class UserSubmissionHolder extends UserDefinedForm {
 	private static $defaults = array(
 		'Content' => '$Listing',
 		'ContentAdd' => '$UserDefinedForm',
+		'ItemsPerPage' => 5,
 	);
 
 	private static $allowed_children = array(
@@ -68,7 +70,7 @@ class UserSubmissionHolder extends UserDefinedForm {
 				// If set value isn't in dropdown, make it appear in there.
 				$userFields[$self->SubmissionPageTitleField] = '<Field Deleted>';
 			} else if (!$self->SubmissionPageTitleField) {
-				$userFields[''] = '(Select Field)';
+				$userFields = array_merge(array('' => '(Select Field)'), $userFields);
 			}
 			$fields->push($field = DropdownField::create('SubmissionPageTitleField', 'Submission Page Title Field', $userFields));
 			$field->setRightTitle('Be careful when modifying this value as it will change the "Title" and "Menu Title" of all your child pages.');
@@ -93,6 +95,7 @@ class UserSubmissionHolder extends UserDefinedForm {
 				$field->setTitle($field->Title() . ' (Listing)');
 				$field->setRightTitle($instructions);
 			}
+			$fields->addFieldToTab('Root.Submissions', NumericField::create('ItemsPerPage')->setRightTitle('If set to 0, then show all items.'));
 			$fields->addFieldToTab('Root.Submissions', $field = HtmlEditorField::create('ContentAdd', 'Content (Form)'));
 			$field->setRightTitle($instructions);
 
@@ -268,11 +271,36 @@ class UserSubmissionHolder extends UserDefinedForm {
 	 * @return ArrayList
 	 */
 	public function Listing() {
+		$list = $this->AllListing();
+
+		$list = PaginatedList::create($list, Controller::curr()->getRequest());
+		if ($this->ItemsPerPage > 0) {
+			$list->setPageLength((int)$this->ItemsPerPage);
+		} else {
+			$list->setPageLength(99999);
+		}
+		return $list;
+	}
+
+	/**
+	 * @return ArrayList
+	 */
+	public function AllListing() {
 		$result = array();
-		foreach ($this->Submissions() as $record) {
-			$page = $record->UserSubmissionPage();
-			if ($page && $page->exists()) {
-				$result[] = $page;
+		$classes = UserSubmissionExtension::get_classes_extending();
+		foreach ($classes as $class)
+		{
+			$list = $class::get()->filter(array(
+				'SubmissionID:not' => 0,
+				'ParentID' => $this->ID,
+			));
+			foreach ($list as $page)
+			{
+				$submission = $page->Submission();
+				if ($submission && $submission->exists())
+				{
+					$result[] = $page;
+				}
 			}
 		}
 		return new ArrayList($result);
@@ -288,9 +316,13 @@ class UserSubmissionHolder extends UserDefinedForm {
 		}
 
 		// Get listing HTML
-		$listingHTML = $this->customise(array(
-			'Listing' => $this->Listing(),
-		))->renderWith(array($this->ClassName.'_Listing', __CLASS__.'_Listing'));
+		$listingHTML = '';
+		if (Config::inst()->get('SSViewer', 'theme_enabled'))
+		{
+			$listingHTML = $this->customise(array(
+				'Listing' => $this->Listing(),
+			))->renderWith(array($this->ClassName.'_Listing', __CLASS__.'_Listing'));
+		}
 
 		return array(
 			'$Listing' => array(

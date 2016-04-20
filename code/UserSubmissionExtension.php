@@ -27,7 +27,17 @@ class UserSubmissionExtension extends DataExtension {
 		$submission = $this->owner->Submission();
 		if (!$submission || !$submission->exists())
 		{
+			// If no submission and not underneath a 'UserSubmissionHolder' then show an error
 			$fields->insertBefore(LiteralField::create('InvalidSetup_Text', '<p><span style="color: #C00;">Warning: </span>This page must be moved underneath a "'.singleton('UserSubmissionHolder')->singular_name().'" page type to work properly.</p>'), 'Title');
+			$fields->removeByName(array('Title', 'MenuTitle', 'Content'));
+			return;
+		}
+
+		// Detect if submission parent matches this page parent. If it doesn't tell the user there is an issue.
+		$userSubmissionHolder = $submission->UserSubmissionHolder();
+		$parent = $this->owner->Parent();
+		if ($userSubmissionHolder && $parent && $userSubmissionHolder->ID != $parent->ID) {
+			$fields->insertBefore(LiteralField::create('InvalidSetup_Text', '<p><span style="color: #C00;">Warning: </span>This page must be moved underneath a "'.$userSubmissionHolder->Title.'" (ID #'.$userSubmissionHolder->ID.') page to work properly as the submission is bound to that page.</p>'), 'Title');
 			$fields->removeByName(array('Title', 'MenuTitle', 'Content'));
 			return;
 		}
@@ -171,7 +181,7 @@ class UserSubmissionExtension extends DataExtension {
 			'Values' => $submission->Values()
 		);
 		foreach ($submission->Values() as $record) {
-			$data[$record->Name] = $record->Value;
+			$data[$record->Name] = $record->getFormattedValue();
 		}
 		return DBField::create_field('HTMLText', SSViewer::fromString($ssMarkup)->process($this->owner->customise($data)));
 	}
@@ -208,10 +218,18 @@ class UserSubmissionExtension extends DataExtension {
 		}
 		// Only set the value if they aren't equal. This ensures
 		// that changed fields isn't updated with an identical value.
-		$title = $submission->relField($fieldName);
+		$formFieldValue = SubmittedFormField::get()->filter(array(
+			'ParentID' => $submission->ID,
+			'Name' => $fieldName
+		))->first();
+		if (!$formFieldValue) {
+			return;
+		}
+		$title = $formFieldValue->Value;
 		if ($title !== null)
 		{
 			$title = (string)$title;
+			
 			foreach ($title_fields as $fieldName)
 			{
 				if ($this->owner->hasDatabaseField($fieldName) && $this->owner->{$fieldName} !== $title) {

@@ -10,6 +10,7 @@ Extends User Defined Forms so that CMS users can create customized listings base
 
 ## Requirements
 - SilverStripe 3.1 or higher
+- [User Defined Forms](https://github.com/silverstripe/silverstripe-userforms/tree/3.0) 3.0
 - [BetterButtons](https://github.com/unclecheese/silverstripe-gridfield-betterbuttons) 1.2 or higher (lower versions might work fine but are untested)
 
 ## Installation

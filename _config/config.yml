@@ -6,3 +6,6 @@ SubmittedForm:
 SubmittedFormField:
   extensions:
     - SubmittedFormFieldListingExtension
+EditableFormField:
+  extensions:
+    - EditableFormFieldListingExtension

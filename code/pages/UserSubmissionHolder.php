@@ -21,6 +21,13 @@ class UserSubmissionHolder extends UserDefinedForm {
 	);
 
 	/**
+	 * Enables search form functionality. 
+	 *
+	 * @var boolean
+	 */
+	private static $enable_search_form = true;
+
+	/**
 	 * @var string
 	 */
 	private static $description = 'Adds a customizable form where users can submit information to be approved and added to a listing.';
@@ -107,6 +114,18 @@ class UserSubmissionHolder extends UserDefinedForm {
 				->setRows(10)
 			);
 
+			// Add search info
+			if ($self->config()->enable_search_form)
+			{
+				$fields->addFieldToTab('Root.Main', $field = ReadonlyField::create('Search_EnableOnSearchForm_Readonly', 'Search Form Fields'));
+				$field->setValue(implode(', ', $self->Fields()->filter('EnableOnSearchForm', true)->map('ID', 'Title')->toArray()));
+				$field->setRightTitle('Fields that currently have "Show field on search form?" checked in their options.');
+
+				$fields->addFieldToTab('Root.Main', $field = ReadonlyField::create('Search_UseInKeywordSearch_Readonly', 'Search Form Fields in Keyword Search'));
+				$field->setValue(implode(', ', $self->Fields()->filter('UseInKeywordSearch', true)->map('ID', 'Title')->toArray()));
+				$field->setRightTitle('Fields that currently have "Use for "Keywords" field search?" checked in their options.');
+			}
+
 			// Update Email Recipients gridfield to use custom email recipient class
 			$gridField = $fields->dataFieldByName('EmailRecipients');
 			if ($gridField) {
@@ -115,6 +134,8 @@ class UserSubmissionHolder extends UserDefinedForm {
 		});
 
 		$fields = parent::getCMSFields();
+		if ($field = $fields->dataFieldByName('Search_UseInKeywordSearch_Readonly')) { $fields->insertAfter($field, 'Fields'); }
+		if ($field = $fields->dataFieldByName('Search_EnableOnSearchForm_Readonly')) { $fields->insertAfter($field, 'Fields'); }
 		if ($field = $fields->dataFieldByName('TemplatePageMarkup')) {
 			$fields->insertAfter($field, 'Fields');
 			$this->insertCMSTemplateAddFieldButtons($fields, 'TemplatePageMarkup');
@@ -123,15 +144,9 @@ class UserSubmissionHolder extends UserDefinedForm {
 			$fields->insertAfter($field, 'Fields');
 			$this->insertCMSTemplateAddFieldButtons($fields, 'TemplateHolderMarkup');
 		}
-		if ($field = $fields->dataFieldByName('SubmissionPageTitleField')) {
-			$fields->insertAfter($field, 'Fields');
-		}
-		if ($field = $fields->dataFieldByName('SubmissionPageClassName')) {
-			$fields->insertAfter($field, 'Fields');
-		}
-		if ($field = $fields->dataFieldByName('SubmissionPageClassName_Readonly')) {
-			$fields->insertAfter($field, 'Fields');
-		}
+		if ($field = $fields->dataFieldByName('SubmissionPageTitleField')) { $fields->insertAfter($field, 'Fields'); }
+		if ($field = $fields->dataFieldByName('SubmissionPageClassName')) { $fields->insertAfter($field, 'Fields'); }
+		if ($field = $fields->dataFieldByName('SubmissionPageClassName_Readonly')) { $fields->insertAfter($field, 'Fields'); }
 		return $fields;
 	}
 
@@ -272,8 +287,10 @@ class UserSubmissionHolder extends UserDefinedForm {
 	 */
 	public function Listing() {
 		$list = $this->AllListing();
-
-		$list = PaginatedList::create($list, Controller::curr()->getRequest());
+		if (!$list) {
+			return $list;
+		}
+		$list = PaginatedList::create($this->AllListing(), Controller::curr()->getRequest());
 		if ($this->ItemsPerPage > 0) {
 			$list->setPageLength((int)$this->ItemsPerPage);
 		} else {
@@ -283,13 +300,38 @@ class UserSubmissionHolder extends UserDefinedForm {
 	}
 
 	/**
-	 * @return ArrayList
+	 * @return array
 	 */
-	public function AllListing() {
+	public function AllListing_DataLists() {
 		$result = array();
 		$classes = UserSubmissionExtension::get_classes_extending();
 		foreach ($classes as $class)
 		{
+			$result[$class] = $class::get()->filter(array(
+				'SubmissionID:not' => 0,
+				'ParentID' => $this->ID,
+			));
+		}
+		return $result;
+	}
+
+	/**
+	 * @return ArrayList
+	 */
+	public function AllListing() {
+		if ($this->AllListing !== null) {
+			// NOTE: Allow overiding AllListing by setting property, this is used by the UserSubmissionSearchForm.
+			return $this->AllListing;
+		}
+
+		$result = array();
+		$classes = UserSubmissionExtension::get_classes_extending();
+		foreach ($classes as $class)
+		{
+			/**
+			 * @var DataList
+			 */
+			// todo(Jake): refactor
 			$list = $class::get()->filter(array(
 				'SubmissionID:not' => 0,
 				'ParentID' => $this->ID,
@@ -324,7 +366,7 @@ class UserSubmissionHolder extends UserDefinedForm {
 			))->renderWith(array($this->ClassName.'_Listing', __CLASS__.'_Listing'));
 		}
 
-		return array(
+		$result = array(
 			'$Listing' => array(
 				'Help' => 'Displays the approved submissions.',
 				'Value' => $listingHTML,
@@ -334,6 +376,14 @@ class UserSubmissionHolder extends UserDefinedForm {
 				'Value' => $controller->Form()->forTemplate(),
 			),
 		);
+		if (self::config()->enable_search_form)
+		{
+			$result['$UserSubmissionSearchForm'] = array(
+				'Help' => 'Displays the search form',
+				'Value' => $controller->UserSubmissionSearchForm()->forTemplate(),
+			);
+		}
+		return $result;
 	}
 
 	/**
@@ -372,6 +422,7 @@ class UserSubmissionHolder_Controller extends UserDefinedForm_Controller {
 	private static $allowed_actions = array(
 		'index',
 		'add',
+		'UserSubmissionSearchForm',
 	);
 
 	protected $templateHasForm = false;
@@ -388,5 +439,15 @@ class UserSubmissionHolder_Controller extends UserDefinedForm_Controller {
 			'Content' => $this->ContentAdd(),
 			'Form' => '',
 		);
+	}
+
+	public function UserSubmissionSearchForm() {
+		if (!UserSubmissionHolder::config()->enable_search_form) {
+			if ($this->request->param('Action') == __FUNCTION__) {
+				return $this->httpError(404);
+			}
+			return null;
+		}
+		return UserSubmissionSearchForm::create($this, __FUNCTION__);
 	}
 }

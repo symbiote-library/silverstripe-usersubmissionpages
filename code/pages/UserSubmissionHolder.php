@@ -269,6 +269,31 @@ class UserSubmissionHolder extends UserDefinedForm {
 	}
 
 	/**
+	 * Get SubmittedForm IDs for items that are attached to pages. ie. approved.
+	 *
+	 * NOTE: Cached as its called ~3 times for the UserSubmissionSearchForm per request.
+	 *
+	 * @return array
+	 */
+	protected $_cache_submitted_form_ids = null;
+	public function PublishedSubmittedFormIDs() {
+		if ($this->_cache_submitted_form_ids != null) {
+			return $this->_cache_submitted_form_ids;
+		}
+		// Get list of page IDs of approved submissions
+		$submissionIDs = array();
+		foreach ($this->AllListing_DataLists() as $class => $dataList)
+		{
+			// Multiple data lists are to support pages using UserSubmissionExtension
+			foreach ($dataList->column('SubmissionID') as $id)
+			{
+				$submissionIDs[$id] = $id;
+			}
+		}
+		return $this->_cache_submitted_form_ids = $submissionIDs;
+	}
+
+	/**
 	 * @return string
 	 */
 	public function Content() {
@@ -325,18 +350,9 @@ class UserSubmissionHolder extends UserDefinedForm {
 		}
 
 		$result = array();
-		$classes = UserSubmissionExtension::get_classes_extending();
-		foreach ($classes as $class)
+		foreach ($this->AllListing_DataLists() as $dataList)
 		{
-			/**
-			 * @var DataList
-			 */
-			// todo(Jake): refactor
-			$list = $class::get()->filter(array(
-				'SubmissionID:not' => 0,
-				'ParentID' => $this->ID,
-			));
-			foreach ($list as $page)
+			foreach ($dataList as $page)
 			{
 				$submission = $page->Submission();
 				if ($submission && $submission->exists())
@@ -357,13 +373,14 @@ class UserSubmissionHolder extends UserDefinedForm {
 			$controller = UserSubmissionHolder_Controller::create($this);
 		}
 
-		// Get listing HTML
+		// Get listing HTML (only on frontend)
 		$listingHTML = '';
 		if (Config::inst()->get('SSViewer', 'theme_enabled'))
 		{
 			$listingHTML = $this->customise(array(
 				'Listing' => $this->Listing(),
-			))->renderWith(array($this->ClassName.'_Listing', __CLASS__.'_Listing'));
+				'UserSubmissionSearchForm' => $controller->UserSubmissionSearchForm(),
+			))->renderWith(array($this->ClassName.'_Listing', 'UserSubmissionHolder_Listing'));
 		}
 
 		$result = array(

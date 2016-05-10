@@ -12,5 +12,9 @@
 		</div>
 	</section>
 <% else %>
-	<p>No submissions available.</p>
+	<% if $UserSubmissionSearchForm && $UserSubmissionSearchForm.HasSearched %>
+		<p>Unable to find submissions that match your search.</p>
+	<% else %>
+		<p>No submissions available.</p>
+	<% end_if %>
 <% end_if %>

@@ -17,7 +17,8 @@ class UserSubmissionSearchForm extends Form {
 	protected $formMethod = 'get';
 
 	public function __construct($controller, $name) {
-		$userSubmissionHolder = $controller->data();
+		$this->controller = $controller;
+		$userSubmissionHolder = $this->controller->data();
 		$editableFormFields = $userSubmissionHolder->Fields()->filter(array('EnableOnSearchForm' => true));
 
 		$fields = new FieldList();
@@ -56,36 +57,84 @@ class UserSubmissionSearchForm extends Form {
 		//$this->extend('updateForm');
 	}
 
+	/**
+	 * Check if the search action has been set.
+	 *
+	 * @var boolean
+	 */
+	public function getHasSearched() {
+		return isset($_REQUEST['action_doSearch']);
+	}
+
+	/**
+	 * Get keywords for use on UserSubmissionHolder_Listing template.
+	 *
+	 * @var string
+	 */
+	public function getKeywords() {
+		if ($this->HasSearched && ($field = $this->fields->dataFieldByName('Keywords')))
+		{
+			return isset($_REQUEST['Keywords']) ? (string)$_REQUEST['Keywords'] : '';
+		}
+		return '';
+	}
+
 	public function getFormFieldFromEditableFormField(EditableFormField $fieldRecord)
 	{
 		$field = $fieldRecord->getFormField();
 		// Remove templates added by EditableFormField
 		$field->setFieldHolderTemplate(null);
 		$field->setTemplate(null);
-		// Attach EditableFormField to differentiate EditableFormField fields from regular ones
-		// in the form.
-		$field->EditableFormField = $fieldRecord;
+		// Simplify dropdown to only have options that are used
+		if ($field->hasMethod('getSource')) {
+			$source = $field->getSource();
+			
+			$availableSources = SubmittedFormField::get()->filter(array(
+				'ParentID' => $this->controller->data()->PublishedSubmittedFormIDs(),
+				'Name' => $fieldRecord->Name,
+				'Value' => array_keys($source),
+			))->column('Value');
+
+			if (!$availableSources)
+			{
+				// Don't show the field if there is nothing to search on.
+				return null;
+			}
+
+			$newSources = array();
+			foreach ($availableSources as $value)
+			{
+				if (isset($source[$value]))
+				{
+					$newSources[$value] = $source[$value];
+				}
+			}
+
+			if (!$newSources)
+			{
+				// Don't show the field if there is nothing to search on.
+				return null;
+			}
+
+			$field->setSource($newSources);
+		}
 		if ($field->hasMethod('setHasEmptyDefault') && ($dropdownEmptyString = $this->config()->dropdown_empty_string))
 		{
 			// Defaults to '- Please select -', configured above.
 			$field->setEmptyString($dropdownEmptyString);
 		}
+		// Attach EditableFormField to differentiate EditableFormField fields from regular ones
+		// in the form.
+		$field->EditableFormField = $fieldRecord;
 		return $field;
 	}
 
 	public function doSearch($data) {
 		$userSubmissionHolder = $this->controller->data();
+		$userSubmissionHolder->SearchData = new ArrayData(array('Keywords' => 'asfaf'));
 
 		// Get list of page IDs of approved submissions
-		$submissionIDs = array();
-		foreach ($userSubmissionHolder->AllListing_DataLists() as $class => $dataList)
-		{
-			// Multiple data lists are to support pages using UserSubmissionExtension
-			foreach ($dataList->column('SubmissionID') as $id)
-			{
-				$submissionIDs[$id] = $id;
-			}
-		}
+		$submissionIDs = $userSubmissionHolder->PublishedSubmittedFormIDs();
 
 		// If the 'Keywords' field exists, then utilize sent Keywords data.
 		$keywords = '';
@@ -179,8 +228,8 @@ class UserSubmissionSearchForm extends Form {
 		$resultSubmittedFormIDs = $list->column('ParentID');
 		if (!$resultSubmittedFormIDs)
 		{
-			// Empty result
-			$userSubmissionHolder->AllListing = array();
+			// Set AllListing to be forced empty
+			$userSubmissionHolder->AllListing = false;
 			return array();
 		}
 

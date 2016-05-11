@@ -23,6 +23,7 @@ class UserSubmissionHolder extends UserDefinedForm {
 	/**
 	 * Enables search form functionality. 
 	 *
+	 * @config
 	 * @var boolean
 	 */
 	private static $enable_search_form = true;
@@ -293,18 +294,24 @@ class UserSubmissionHolder extends UserDefinedForm {
 		return $this->_cache_submitted_form_ids = $submissionIDs;
 	}
 
-	/**
+	/** 
+	 * The $Content field with $UserDefinedForm/$Listing text removed and blanked,
+	 * this is done for listing pages.
+	 *
 	 * @return string
 	 */
 	public function Content() {
-		return $this->applyContentVariables($this->getField(__FUNCTION__));
+		return $this->applyContentVariables($this->getField(__FUNCTION__), true);
 	}
 
-	/**
+	/** 
+	 * The $ContentAdd field with $UserDefinedForm/$Listing text removed and blanked,
+	 * this is done for listing pages.
+	 *
 	 * @return string
 	 */
 	public function ContentAdd() {
-		return $this->applyContentVariables($this->getField(__FUNCTION__));
+		return $this->applyContentVariables($this->getField(__FUNCTION__), true);
 	}
 
 	/**
@@ -367,38 +374,53 @@ class UserSubmissionHolder extends UserDefinedForm {
 	/**
 	 * @return array
 	 */
-	public function ContentVariables() {
+	public function ContentVariables($emptyValues = false) {
+		$result = array(
+			'$Listing' => array(
+				'Help' => 'Displays the approved submissions.',
+				'Value' => '',
+			),
+			'$UserDefinedForm' => array(
+				'Help' => 'Displays the form',
+				'Value' => '',
+			),
+			'$UserSubmissionSearchForm' => array(
+				'Help' => 'Displays the search form',
+				'Value' => '',
+			),
+		);
+
+		if (!self::config()->enable_search_form)
+		{
+			unset($result['$UserSubmissionSearchForm']);
+		}
+
+		// Just return help text if $emptyValues is true.
+		if ($emptyValues) {
+			return $result;
+		}
+
 		$controller = Controller::curr();
 		if (!$controller instanceof UserSubmissionHolder_Controller) {
 			$controller = UserSubmissionHolder_Controller::create($this);
 		}
 
+		// Get user defined form HTML
+		$result['$UserDefinedForm']['Value'] = $controller->Form()->forTemplate();
+
 		// Get listing HTML (only on frontend)
-		$listingHTML = '';
 		if (Config::inst()->get('SSViewer', 'theme_enabled'))
 		{
-			$listingHTML = $this->customise(array(
+			$result['$Listing']['Value'] = $this->customise(array(
 				'Listing' => $this->Listing(),
 				'UserSubmissionSearchForm' => $controller->UserSubmissionSearchForm(),
 			))->renderWith(array($this->ClassName.'_Listing', 'UserSubmissionHolder_Listing'));
 		}
 
-		$result = array(
-			'$Listing' => array(
-				'Help' => 'Displays the approved submissions.',
-				'Value' => $listingHTML,
-			),
-			'$UserDefinedForm' => array(
-				'Help' => 'Displays the form',
-				'Value' => $controller->Form()->forTemplate(),
-			),
-		);
+		// Get search form HTML
 		if (self::config()->enable_search_form)
 		{
-			$result['$UserSubmissionSearchForm'] = array(
-				'Help' => 'Displays the search form',
-				'Value' => $controller->UserSubmissionSearchForm()->forTemplate(),
-			);
+			$result['$UserSubmissionSearchForm']['Value'] = $controller->UserSubmissionSearchForm()->forTemplate();
 		}
 		return $result;
 	}
@@ -409,11 +431,8 @@ class UserSubmissionHolder extends UserDefinedForm {
 	 *
 	 * @return string
 	 */
-	public function applyContentVariables($value) {
-		$controllerName = __CLASS__.'_Controller';
-		$controller = singleton($controllerName);
-
-		foreach ($this->ContentVariables() as $varname => $data) {
+	public function applyContentVariables($value, $replaceWithEmptyValues = false) {
+		foreach ($this->ContentVariables($replaceWithEmptyValues) as $varname => $data) {
 			if (isset($data['Value'])) {
 				$value = preg_replace('/(<p[^>]*>)?\\'.$varname.'(<\\/p>)?/i', $data['Value'], $value);
 			}
@@ -466,5 +485,23 @@ class UserSubmissionHolder_Controller extends UserDefinedForm_Controller {
 			return null;
 		}
 		return UserSubmissionSearchForm::create($this, __FUNCTION__);
+	}
+
+	/**
+	 * Replace $Content with the $Listing/$UserDefinedForm HTML.
+	 *
+	 * @return string
+	 */
+	public function Content() {
+		return $this->data()->applyContentVariables($this->data()->getField('Content'));
+	}
+
+	/**
+	 * Replace $Content with the $Listing/$UserDefinedForm HTML.
+	 *
+	 * @return string
+	 */
+	public function ContentAdd() {
+		return $this->data()->applyContentVariables($this->data()->getField('ContentAdd'));
 	}
 }

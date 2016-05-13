@@ -9,3 +9,10 @@ SubmittedFormField:
 EditableFormField:
   extensions:
     - EditableFormFieldListingExtension
+---
+Only:
+  classexists: 'SolrSearch'
+---
+UserSubmissionPage:
+  extensions:
+    - UserSubmissionSolrExtension

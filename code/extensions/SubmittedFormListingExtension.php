@@ -40,7 +40,7 @@ class SubmittedFormListingExtension extends DataExtension {
 		if ($page && $page->exists()) {
 			$this->httpError(400);
 		}
-		if (!$this->owner->canApproveUserSubmissionPage()) {
+		if (!$this->owner->canApprove()) {
 			$this->httpError(400);
 		}
         $newPage = $this->createInstanceFromThis();
@@ -69,7 +69,7 @@ class SubmittedFormListingExtension extends DataExtension {
 			$page = $this->owner->UserSubmissionPage();
 			if ((!$page || !$page->exists())
 				&& 
-				$this->owner->canApproveUserSubmissionPage()) 
+				$this->owner->canApprove()) 
 			{
 				$approveText = ($this->owner->config()->make_approve_action_publish) ? 'Approve and Publish Page' : 'Approve and Create Draft Page';
 				$fields->push(BetterButtonCustomAction::create('approve', $approveText));
@@ -86,8 +86,6 @@ class SubmittedFormListingExtension extends DataExtension {
 			} else {
 				$colour = '#1391DF';
 				$text = 'Pending';
-				//$colour = '#C00';
-				//$text = 'Not Approved';
 			}
 			$html = HTMLText::create('CMSState');
 			$html->setValue(sprintf(
@@ -210,15 +208,23 @@ class SubmittedFormListingExtension extends DataExtension {
 
 	/**
 	 * Check if user has permission to approve turning this into a page
-	 * NOTE: Function name is not 'canApprove' to avoid recursion.
 	 *
 	 * @return boolean
 	 */
-	public function canApproveUserSubmissionPage($member = null) {
+	protected $inCanApproveCall = false;
+	public function canApprove($member = null) {
+		if ($this->inCanApproveCall) {
+			return null;
+		}
 		if (!$member) {
 			$member = Member::currentUser();
 		}
-		$extended = $this->owner->extendedCan('canApprove', $member);
+
+		// Prevent recursion with extend functions.
+		$this->inCanApproveCall = true;
+		$extended = $this->owner->extendedCan(__FUNCTION__, $member);
+		$this->inCanApproveCall = false;
+
 		if($extended !== null) {
 			return $extended;
 		}
@@ -231,11 +237,9 @@ class SubmittedFormListingExtension extends DataExtension {
 	}
 
 	public function canDelete($member = null) {
-		if ($this->owner->UserSubmissionPageID > 0) {
-			$page = $this->owner->UserSubmissionPage();
-			if ($page && $page->exists()) {
-				return false;
-			}
+		$page = $this->owner->UserSubmissionPage();
+		if ($page && $page->exists()) {
+			return false;
 		}
 	}
 }

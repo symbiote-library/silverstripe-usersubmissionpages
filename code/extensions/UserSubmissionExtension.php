@@ -14,11 +14,22 @@ class UserSubmissionExtension extends DataExtension {
 
 	/**
 	 * Update DB fields defined here based on UserSubmissionHolder::$SubmissionPageTitleField
+	 *
+	 * @config
+	 * @var array
 	 */
 	private static $title_fields = array(
 		'Title',
 		'MenuTitle',
 	);
+
+	/**
+	 * Update DB field defined here with $TemplateHolderMarkup when this page or the holder is updated.
+	 *
+	 * @config
+	 * @var string 
+	 */
+	private static $content_field = 'Content';
 
 	public function updateCMSFields(FieldList $fields) {
 		/**
@@ -28,7 +39,7 @@ class UserSubmissionExtension extends DataExtension {
 		if (!$submission || !$submission->exists())
 		{
 			// If no submission and not underneath a 'UserSubmissionHolder' then show an error
-			$fields->insertBefore(LiteralField::create('InvalidSetup_Text', '<p><span style="color: #C00;">Warning: </span>This page must be moved underneath a "'.singleton('UserSubmissionHolder')->singular_name().'" page type to work properly.</p>'), 'Title');
+			$fields->insertBefore(LiteralField::create('InvalidSetup_Text', '<p><span style="color: #C00;">Warning: </span>This page is missing SubmittedForm data.</p>'), 'Title');
 			$fields->removeByName(array('Title', 'MenuTitle', 'Content'));
 			return;
 		}
@@ -78,6 +89,7 @@ class UserSubmissionExtension extends DataExtension {
 		$config->addComponent(new GridFieldEditButton);
 		$config->addComponent(new GridFieldDetailForm);
 		$config->addComponent(new GridFieldUserSubmissionAddMissingFields);
+
 		$fields->removeByName(array('Abstract', 'Content'));
 	}
 
@@ -113,15 +125,9 @@ class UserSubmissionExtension extends DataExtension {
 		parent::onBeforeWrite();
 	}
 
-	/*public function validate(ValidationResult $result) {
-		$parent = $this->owner->getParent();
-		if (!$parent || !$parent instanceof UserSubmissionHolder) {
-			$singleton = $this->owner->singular_name();
-			$result->error('Cannot create "'.$this->owner->singular_name().'" unless the parent page is UserSubmissionHolder', 'PARENT_NOT_USERSUBMISSIONHOLDER');
-		}
-	}*/
-
 	/**
+	 * The markup to show on the holder page / $Listing
+	 *
 	 * @return string
 	 */
 	public function TemplateHolderMarkup() {
@@ -133,6 +139,8 @@ class UserSubmissionExtension extends DataExtension {
 	}
 
 	/**
+	 * The markup to show on the page.
+	 *
 	 * @return string
 	 */
 	public function TemplatePageMarkup() {
@@ -141,16 +149,6 @@ class UserSubmissionExtension extends DataExtension {
 			return $this->owner->processTemplateMarkup($holderPage->TemplatePageMarkup);
 		}
 		return '';
-	}
-
-	/**
-	 * Replace $Content with UserSubmissionHolder::$TemplatePageMarkup
-	 */
-	public function Content() {
-		if ($result = $this->owner->TemplatePageMarkup()) {
-			return $result;
-		}
-		return $this->owner->getField('Content');
 	}
 
 	/**
@@ -196,11 +194,6 @@ class UserSubmissionExtension extends DataExtension {
 			return;
 		}
 		$this->__HasUpdatedDBFromSubmission = true;
-		$title_fields = $this->owner->stat('title_fields');
-		if (!$title_fields)
-		{
-			return;
-		}
 		$submission = $this->owner->Submission();
 		if (!$submission || !$submission->exists()) {
 			return;
@@ -210,30 +203,50 @@ class UserSubmissionExtension extends DataExtension {
 		{
 			return;
 		}
-		// Get form field name to use. ie. $EditableTextField_6746f
-		$fieldName = $holderPage->SubmissionPageTitleField;
-		if (!$fieldName)
+
+		// Update content field
+		$content_field = $this->owner->stat('content_field');
+		if ($content_field && $this->owner->hasDatabaseField($content_field))
 		{
-			return;
-		}
-		// Only set the value if they aren't equal. This ensures
-		// that changed fields isn't updated with an identical value.
-		$formFieldValue = SubmittedFormField::get()->filter(array(
-			'ParentID' => $submission->ID,
-			'Name' => $fieldName
-		))->first();
-		if (!$formFieldValue) {
-			return;
-		}
-		$title = $formFieldValue->Value;
-		if ($title !== null)
-		{
-			$title = (string)$title;
-			
-			foreach ($title_fields as $fieldName)
+			$contentValue = $this->owner->{$content_field};
+			$templatePageMarkup = $this->owner->TemplatePageMarkup();
+			if ($templatePageMarkup instanceof HTMLText) {
+				$templatePageMarkup = $templatePageMarkup->getValue();
+			}
+			if ($contentValue != $templatePageMarkup)
 			{
-				if ($this->owner->hasDatabaseField($fieldName) && $this->owner->{$fieldName} !== $title) {
-					$this->owner->{$fieldName} = $title;
+				$this->owner->{$content_field} = $templatePageMarkup;
+			}
+		}
+
+		// Update title fields (defaults to $Title/$MenuTitle)
+		$title_fields = $this->owner->stat('title_fields');
+		if ($title_fields)
+		{
+			// Get form field name to use. ie. $EditableTextField_6746f
+			$fieldName = $holderPage->SubmissionPageTitleField;
+			if ($fieldName)
+			{
+				// Only set the value if they aren't equal. This ensures
+				// that changed fields isn't updated with an identical value.
+				$formFieldValue = SubmittedFormField::get()->filter(array(
+					'ParentID' => $submission->ID,
+					'Name' => $fieldName
+				))->first();
+				if ($formFieldValue) 
+				{
+					$title = $formFieldValue->Value;
+					if ($title !== null)
+					{
+						$title = (string)$title;
+						
+						foreach ($title_fields as $fieldName)
+						{
+							if ($this->owner->hasDatabaseField($fieldName) && $this->owner->{$fieldName} !== $title) {
+								$this->owner->{$fieldName} = $title;
+							}
+						}
+					}
 				}
 			}
 		}
@@ -242,16 +255,19 @@ class UserSubmissionExtension extends DataExtension {
 	/**
 	 * Updates $Title and $MenuTitle fields based on SubmittedForm
 	 * data object and writes the changes into the database.
+	 *
 	 */
 	public function writeAndUpdateDBFromSubmission() {
 		$this->owner->updateDBFromSubmission();
 		if ($this->owner->getChangedFields(true)) {
-			// Only writes if the 'Title', 'MenuTitle' or anything else on the record
-			// has actually been changed
 			$isLatestPublished = ($this->owner->has_extension('Versioned') && !$this->owner->stagesDiffer('Stage', 'Live'));
-			$this->owner->writeWithoutVersion();
+			$this->owner->write();
 			if ($isLatestPublished) {
 				// Only publish immediately if these field changes are the only update.
+				//
+				// This is done because this function was designed to only be called from UserSubmissionHolder 
+				// when the $TemplatePageMarkup or $SubmissionPageTitleField is changed, and it saves the user/client
+				// time by not making them have to publish each item.
    				$this->owner->doPublish();
    			}
    			return true;
@@ -259,10 +275,10 @@ class UserSubmissionExtension extends DataExtension {
 		return false;
 	}
 
-	protected static $classes_extending_cache = null;
+	protected static $_classes_extending_cache = null;
 	public static function get_classes_extending() {
-		if (static::$classes_extending_cache) {
-			return static::$classes_extending_cache;
+		if (static::$_classes_extending_cache) {
+			return static::$_classes_extending_cache;
 		}
 
 		$result = array();
@@ -273,6 +289,6 @@ class UserSubmissionExtension extends DataExtension {
 				$result[$class] = $class;
 			}
 		}
-		return static::$classes_extending_cache = $result;
+		return static::$_classes_extending_cache = $result;
 	}
 }

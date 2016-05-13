@@ -21,7 +21,7 @@ class UserSubmissionHolder extends UserDefinedForm {
 	);
 
 	/**
-	 * Enables search form functionality. 
+	 * Enables basic search form functionality. 
 	 *
 	 * @config
 	 * @var boolean
@@ -244,15 +244,30 @@ class UserSubmissionHolder extends UserDefinedForm {
 		parent::onAfterWrite();
 		$changedFields = $this->getChangedFields();
 
-		if (isset($changedFields['SubmissionPageTitleField']) && $changedFields['SubmissionPageTitleField']) {
-			$fieldState = $changedFields['SubmissionPageTitleField'];
-			if ($fieldState['before'] !== $fieldState['after'] && $fieldState['after'] != '') {
-				$subPagesModified = false;
-				$classes = UserSubmissionExtension::get_classes_extending();
-				foreach (SiteTree::get()->filter(array('ClassName' => $classes)) as $record) {
-					$subPagesModified = $subPagesModified || $record->writeAndUpdateDBFromSubmission();
-				}
-				// note(Jake): explored updating the pages in the sitetree, but it isn't worth it.
+		// For detecting a change to $SubmissionPageTitleField sp that all child pages can have their title
+		// fields updated to match the $SubmittedFormField.Value
+		$hasChangedSubmissionPageTitleField = false;
+		if (isset($changedFields['SubmissionPageTitleField']) && $changedFields['SubmissionPageTitleField']
+			&& $changedFields['SubmissionPageTitleField']['before'] !== $changedFields['SubmissionPageTitleField']['after']
+			&& $changedFields['SubmissionPageTitleField']['after'] != '') 
+		{
+			$hasChangedSubmissionPageTitleField = true;
+		}
+
+		// For detecting a change to $TemplatePageMarkup so that all child pages have their $Content field
+		// updated to the HTML provided.
+		$hasChangedTemplatePageMarkup = false;
+		if (isset($changedFields['TemplatePageMarkup']) && $changedFields['TemplatePageMarkup']
+			&& $changedFields['TemplatePageMarkup']['before'] !== $changedFields['TemplatePageMarkup']['after']) 
+		{
+			$hasChangedTemplatePageMarkup = true;
+		}
+
+		if ($hasChangedSubmissionPageTitleField && $hasChangedTemplatePageMarkup)
+		{
+			$classes = UserSubmissionExtension::get_classes_extending();
+			foreach (SiteTree::get()->filter(array('ClassName' => $classes)) as $record) {
+				$subPagesModified = $subPagesModified || $record->writeAndUpdateDBFromSubmission();
 			}
 		}
 	}

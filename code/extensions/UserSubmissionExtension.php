@@ -91,6 +91,19 @@ class UserSubmissionExtension extends DataExtension {
 		$config->addComponent(new GridFieldUserSubmissionAddMissingFields);
 
 		$fields->removeByName(array('Abstract', 'Content'));
+
+		// If content_field is set and not on the form, show underneath Metadata
+		$content_field = $this->owner->stat('content_field');
+		if ($content_field)
+		{
+			// NOTE: Using getField() because this is for inspecting the DB data.
+			$value = $this->owner->getField($content_field);
+			$fields->addFieldToTab('Root.Main', ToggleCompositeField::create(__CLASS__.'_Internal', 'Internal',
+				array(
+					$metaFieldDesc = ReadonlyField::create($content_field.'_Readonly_'.__CLASS__, $content_field, $value),
+				)
+			));
+		}
 	}
 
 	public function onBeforeWrite() {
@@ -260,16 +273,7 @@ class UserSubmissionExtension extends DataExtension {
 	public function writeAndUpdateDBFromSubmission() {
 		$this->owner->updateDBFromSubmission();
 		if ($this->owner->getChangedFields(true)) {
-			$isLatestPublished = ($this->owner->has_extension('Versioned') && !$this->owner->stagesDiffer('Stage', 'Live'));
 			$this->owner->write();
-			if ($isLatestPublished) {
-				// Only publish immediately if these field changes are the only update.
-				//
-				// This is done because this function was designed to only be called from UserSubmissionHolder 
-				// when the $TemplatePageMarkup or $SubmissionPageTitleField is changed, and it saves the user/client
-				// time by not making them have to publish each item.
-   				$this->owner->doPublish();
-   			}
    			return true;
 		}
 		return false;

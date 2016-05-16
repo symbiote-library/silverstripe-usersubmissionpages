@@ -240,9 +240,19 @@ class UserSubmissionHolder extends UserDefinedForm {
 		return $fieldGroup;
 	}
 
+	/**
+	 * Track records changed by this page to be published.
+	 *
+	 * @var array
+	 */
+	protected $subpagesToPublishIfPublishingThisRecord = array();
+
 	public function onAfterWrite() {
 		parent::onAfterWrite();
 		$changedFields = $this->getChangedFields();
+
+		// Reset
+		$this->subpagesToPublishIfPublishingThisRecord = array();
 
 		// For detecting a change to $SubmissionPageTitleField sp that all child pages can have their title
 		// fields updated to match the $SubmittedFormField.Value
@@ -263,12 +273,43 @@ class UserSubmissionHolder extends UserDefinedForm {
 			$hasChangedTemplatePageMarkup = true;
 		}
 
-		if ($hasChangedSubmissionPageTitleField && $hasChangedTemplatePageMarkup)
+		if ($hasChangedSubmissionPageTitleField || $hasChangedTemplatePageMarkup)
 		{
 			$classes = UserSubmissionExtension::get_classes_extending();
-			foreach (SiteTree::get()->filter(array('ClassName' => $classes)) as $record) {
-				$subPagesModified = $subPagesModified || $record->writeAndUpdateDBFromSubmission();
+			$list = SiteTree::get()->filter(array(
+				'ClassName' => $classes, 
+				'ParentID' => $this->ID
+			));
+			foreach ($list as $record) 
+			{
+				$record->updateDBFromSubmission();
+				if ($record->getChangedFields(true)) 
+				{
+					$isVersionedAndLatestPublished = ($record->has_extension('Versioned') && !$record->stagesDiffer('Stage', 'Live'));
+					$record->write();
+					if ($isVersionedAndLatestPublished) {
+						// Only publish subpages that aren't already in a 'Modified' state.
+						$this->subpagesToPublishIfPublishingThisRecord[] = $record;
+					}
+				}
 			}
+		}
+	}
+
+	public function onAfterPublish($original)
+	{
+		if ($this->subpagesToPublishIfPublishingThisRecord)
+		{
+			foreach ($this->subpagesToPublishIfPublishingThisRecord as $subpage)
+			{
+				if ($subpage && $subpage->canPublish())
+				{
+					$subpage->publish('Stage', 'Live');
+				}
+			}
+
+			// Reset
+			$this->subpagesToPublishIfPublishingThisRecord = array();
 		}
 	}
 

@@ -157,15 +157,15 @@ class UserSubmissionSearchForm extends Form {
 						// eg. (Name = 'EditableTextField_34' AND Value = 'VIC')
 						$valueEscaped = (is_string($value)) ? "'".Convert::raw2sql($value)."'" : (int)$value;
 						$wheres[$name] = array(
-							"Name = '{$nameEscaped}'",
-							"Value = $valueEscaped",
+							"SubmittedFormField.Name = '{$nameEscaped}'",
+							"SubmittedFormField.Value = $valueEscaped",
 						);
 					} else {
 						// eg. (Name = 'EditableTextField_33' AND Value LIKE '%hello%')
 						$valueEscaped = (is_string($value)) ? "LIKE '%".Convert::raw2sql($value)."%'" : '= '.((int)$value);
 						$wheres[$name] = array(
-							"Name = '{$nameEscaped}'",
-							"Value $valueEscaped",
+							"SubmittedFormField.Name = '{$nameEscaped}'",
+							"SubmittedFormField.Value $valueEscaped",
 						);
 					}
 				}
@@ -186,8 +186,8 @@ class UserSubmissionSearchForm extends Form {
 				{
 					$nameEscaped = Convert::raw2sql($editableFormField->Name);
 					$whereKeywords[$editableFormField->Name.'_keywords'] = array(
-						"Name = '{$nameEscaped}'",
-						"Value LIKE '%{$keywordsEscaped}%'",
+						"SubmittedFormField.Name = '{$nameEscaped}'",
+						"SubmittedFormField.Value LIKE '%{$keywordsEscaped}%'",
 					);
 				}
 			}
@@ -203,11 +203,15 @@ class UserSubmissionSearchForm extends Form {
 			}
 		}
 
-		// Only search form field values that belong to a SubmittedForm object that belongs to 
+		// Only search form field values that belong to a SubmittedForm object that belongs to
 		// a UserSubmissionPage (or page extended with UserSubmissionExtended)
-		$list = SubmittedFormField::get()->filter(array(
-			'ParentID' => $submissionIDs,
-		));
+		$list = SubmittedForm::get()
+			->filter('ID', $submissionIDs)
+			->innerJoin('SubmittedFormField', 'SubmittedForm.ID = SubmittedFormField.ParentID')
+			->alterDataQuery(function($query) {
+				// This is so you can match against multiple submitted form fields, and do something like "having 3 matches", where 3 is the number of user filters.
+				$query->groupby('SubmittedFormField.ParentID');
+			});
 
 		// For explicit searches on fields, ie selecting a dropdown value or typing on a text field
 		// that searches on a specific field.
@@ -219,23 +223,19 @@ class UserSubmissionSearchForm extends Form {
 			$whereSQL = '';
 			foreach ($wheres as $whereGroup)
 			{
-				$whereSQL .= ($whereSQL) ? ' AND ' : '';
+				$whereSQL .= ($whereSQL) ? ' OR ' : '';
 				$whereSQL .= '('.implode(' AND ', $whereGroup).')';
 			}
-			$list = $list->where($whereSQL);
-		}
-
-		$resultSubmittedFormIDs = $list->column('ParentID');
-		if (!$resultSubmittedFormIDs)
-		{
-			// Set AllListing to be forced empty
-			$userSubmissionHolder->AllListing = false;
-			return array();
+			$list = $list
+				->where($whereSQL)
+				->alterDataQuery(function($query) use($wheres) {
+					// This is so you can match against multiple submitted form fields, and do something like "having 3 matches", where 3 is the number of user filters.
+					$query->having('COUNT(*) >= ' . count($wheres));
+				});
 		}
 
 		$resultRecords = array();
-		foreach (SubmittedForm::get()->filter('ID', $resultSubmittedFormIDs) as $submission)
-		{
+		foreach($list as $submission) {
 			if (($page = $submission->UserSubmissionPage()))
 			{
 				$resultRecords[$page->ClassName.'_'.$page->ID] = $page;

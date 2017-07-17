@@ -192,7 +192,7 @@ class UserSubmissionExtension extends DataExtension {
 			'Values' => $submission->Values()
 		);
 		foreach ($submission->Values() as $record) {
-			$data[$record->Name] = $record->getFormattedValue();
+			$data[$record->Name] = UserSubmissionViewableData::create($record);
 		}
 		return DBField::create_field('HTMLText', SSViewer::fromString($ssMarkup)->process($this->owner->customise($data)));
 	}

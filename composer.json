@@ -2,7 +2,7 @@
     "name": "silbinarywolf/usersubmissionpages",
     "description": "Adds a customizable form where users can submit information to be approved and added to a listing by the CMS user.",
     "type": "silverstripe-module",
-    "keywords": ["silverstripe"],
+    "keywords": ["silverstripe", "userforms"],
 	"license": "BSD-3-Clause",
     "authors": [
     {
@@ -13,5 +13,8 @@
         "silverstripe/framework": "~3.1",
         "silverstripe/userforms": "~3.0",
         "unclecheese/betterbuttons": "~1.2"
+    },
+    "extra": {
+        "installer-name": "usersubmissionpages"
     }
 }
